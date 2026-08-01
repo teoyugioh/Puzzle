@@ -151,7 +151,7 @@ function downloadPhotoStrip() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `puzzlecam_tira_${Date.now()}.png`;
+    link.download = `puzzlecam_dai_anh_${Date.now()}.png`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -170,7 +170,7 @@ function resetEverything() {
   hideStripComplete();
   updateStripDownloadAvailability();
   resetPuzzleOnly();
-  statusText.textContent = "todo reiniciado";
+  statusText.textContent = "đã reset toàn bộ";
 }
 
 function renderGalleryThumb(snapshotCanvas, index) {
@@ -235,7 +235,7 @@ window.addEventListener("resize", fitCanvasToWindow);
 
 async function initWebcam() {
   if (!navigator.mediaDevices?.getUserMedia) {
-    throw new Error("Este navegador no soporta getUserMedia.");
+    throw new Error("Trình duyệt này không hỗ trợ getUserMedia.");
   }
   const stream = await navigator.mediaDevices.getUserMedia({
     video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" },
@@ -271,7 +271,7 @@ async function initHandLandmarker() {
         "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
       ),
       LOAD_TIMEOUT_MS,
-      "Tiempo de espera agotado cargando el runtime de MediaPipe (WASM). Revisa tu conexión a internet o si cdn.jsdelivr.net está bloqueado."
+      "Hết thời gian chờ khi tải runtime của MediaPipe (WASM). Kiểm tra kết nối internet hoặc xem cdn.jsdelivr.net có bị chặn không."
     );
   } catch (err) {
     throw err;
@@ -292,11 +292,11 @@ async function initHandLandmarker() {
         minTrackingConfidence: 0.6,
       }),
       LOAD_TIMEOUT_MS,
-      "Tiempo de espera agotado descargando el modelo HandLandmarker (~10MB) con GPU."
+      "Hết thời gian chờ khi tải mô hình HandLandmarker (~10MB) bằng GPU."
     );
     return handLandmarker;
   } catch (gpuErr) {
-    console.warn("[PuzzleCam] Falló con delegate GPU, reintentando con CPU…", gpuErr);
+    console.warn("[PuzzleCam] Lỗi với delegate GPU, đang thử lại bằng CPU…", gpuErr);
   }
 
   try {
@@ -314,7 +314,7 @@ async function initHandLandmarker() {
         minTrackingConfidence: 0.6,
       }),
       LOAD_TIMEOUT_MS,
-      "Tiempo de espera agotado descargando el modelo HandLandmarker (~10MB) incluso con CPU. Revisa tu conexión o si storage.googleapis.com está bloqueado en tu red."
+      "Hết thời gian chờ khi tải mô hình HandLandmarker (~10MB) kể cả bằng CPU. Kiểm tra kết nối mạng hoặc xem storage.googleapis.com có bị chặn không."
     );
     return handLandmarker;
   } catch (cpuErr) {
@@ -419,7 +419,7 @@ function drawCountdownOverlay(box) {
   ctx.fillText(String(n), cx, cy);
   ctx.restore();
 
-  statusText.textContent = `capturando en ${n}…`;
+  statusText.textContent = `đang chụp trong ${n}…`;
 }
 
 function gaussianNoise(std) {
@@ -763,7 +763,7 @@ function drawBoardAndPieces() {
     ctx.fillStyle = "#5fae6e";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText("¡COMPLETO! — puño para guardar", box.x + box.width / 2, box.y + box.height / 2);
+    ctx.fillText("HOÀN THÀNH! — nắm tay để lưu", box.x + box.width / 2, box.y + box.height / 2);
     ctx.restore();
   }
 }
@@ -774,7 +774,7 @@ function updateProgressBadge() {
     return;
   }
   const placedCount = puzzle.pieces.filter((p) => p.placed).length;
-  progressText.textContent = `${placedCount} / ${puzzle.pieces.length} piezas colocadas`;
+  progressText.textContent = `${placedCount} / ${puzzle.pieces.length} mảnh đã đặt`;
   progressBadge.classList.add("visible");
   progressBadge.classList.toggle("solved", puzzle.solved);
 }
@@ -964,7 +964,7 @@ function finishShatter() {
   shatter.fragments = [];
   if (shatter.pendingCanvas) {
     addToGallery(shatter.pendingCanvas);
-    statusText.textContent = "¡guardado en la tira!";
+    statusText.textContent = "đã lưu vào dải ảnh!";
     shatter.pendingCanvas = null;
   }
   resetPuzzleOnly();
@@ -972,7 +972,7 @@ function finishShatter() {
 
 function handleFistReset() {
   if (appState !== "puzzle") {
-    statusText.textContent = "reiniciado (puño)";
+    statusText.textContent = "đã reset (nắm tay)";
     resetPuzzleOnly();
     return;
   }
@@ -984,7 +984,7 @@ function handleFistReset() {
     shatter.pendingCanvas = puzzle.fullPhotoboothCanvas;
     startShatter(puzzle.fullPhotoboothCanvas, puzzle.boardBox);
   } else {
-    statusText.textContent = "reiniciado (puño)";
+    statusText.textContent = "đã reset (nắm tay)";
     resetPuzzleOnly();
   }
 }
@@ -995,7 +995,7 @@ let fistHoldCounter = 0;
 function processResults(result) {
   if (appState === "shattering") {
     updateAndDrawShatter();
-    statusText.textContent = "guardando…";
+    statusText.textContent = "đang lưu…";
     return;
   }
 
@@ -1018,8 +1018,8 @@ function processResults(result) {
         drawLiveFrameOverlay(lastSeenFrame.box);
       }
       statusText.textContent = isStripFull()
-        ? "tira completa — descarga o reinicia"
-        : "buscando manos…";
+        ? "dải ảnh đã đầy — tải về hoặc reset"
+        : "đang tìm tay…";
       return;
     }
 
@@ -1033,8 +1033,8 @@ function processResults(result) {
       updateProgressBadge();
       drawBoardAndPieces();
       statusText.textContent = puzzle.solved
-        ? "¡rompecabezas completo! cierra el puño para guardarlo"
-        : "arma el rompecabezas con pinch";
+        ? "puzzle đã hoàn thành! nắm tay để lưu lại"
+        : "ghép puzzle bằng cử chỉ pinch";
       return;
     }
 
@@ -1058,7 +1058,7 @@ function processResults(result) {
 
   if (appState === "tracking") {
     if (isStripFull()) {
-      statusText.textContent = "tira completa — descarga o reinicia";
+      statusText.textContent = "dải ảnh đã đầy — tải về hoặc reset";
       return;
     }
     if (handsLandmarks.length === 2) {
@@ -1081,7 +1081,7 @@ function processResults(result) {
           freezeGate.since = performance.now();
         }
         statusDot.className = "status-dot armed";
-        statusText.textContent = "sostén el pinch…";
+        statusText.textContent = "giữ pinch…";
 
         if (performance.now() - freezeGate.since > FREEZE_HOLD_MS) {
           freezeGate.holding = false;
@@ -1089,7 +1089,7 @@ function processResults(result) {
         }
       } else {
         freezeGate.holding = false;
-        statusText.textContent = "manos en seguimiento";
+        statusText.textContent = "đang theo dõi tay";
       }
     } else {
       freezeGate.holding = false;
@@ -1097,9 +1097,9 @@ function processResults(result) {
       if (lastSeenFrame.box && sinceLastSeen < FRAME_GRACE_MS) {
         applyBWInsideBox(lastSeenFrame.box);
         drawLiveFrameOverlay(lastSeenFrame.box);
-        statusText.textContent = "manos en seguimiento";
+        statusText.textContent = "đang theo dõi tay";
       } else {
-        statusText.textContent = "manos en seguimiento";
+        statusText.textContent = "đang theo dõi tay";
       }
     }
     return;
@@ -1134,9 +1134,9 @@ function processResults(result) {
 
     statusText.textContent = puzzle.solved
       ? (fistHoldCounter > 0
-          ? `guardando… sostén el puño (${fistHoldCounter}/${FIST_HOLD_FRAMES})`
-          : "¡rompecabezas completo! cierra el puño para guardarlo")
-      : "arma el rompecabezas con pinch";
+          ? `đang lưu… giữ nắm tay (${fistHoldCounter}/${FIST_HOLD_FRAMES})`
+          : "puzzle đã hoàn thành! nắm tay để lưu lại")
+      : "ghép puzzle bằng cử chỉ pinch";
   }
 }
 
@@ -1164,7 +1164,7 @@ function showLoaderError(message) {
 function resetLoaderUI() {
   loadingOverlay.classList.remove("hidden");
   loaderText.style.color = "";
-  loaderText.textContent = "cargando modelo HandLandmarker…";
+  loaderText.textContent = "đang tải mô hình HandLandmarker…";
   loaderRetry.classList.add("hidden");
   errorBanner.style.display = "none";
 }
@@ -1176,7 +1176,7 @@ async function boot() {
   const watchdogMs = (LOAD_TIMEOUT_MS * 2) + 5000;
   const watchdog = setTimeout(() => {
     if (!settled) {
-      showLoaderError("La carga está tardando demasiado. Pulsa reintentar o revisa tu conexión.");
+      showLoaderError("Quá trình tải đang mất nhiều thời gian. Nhấn thử lại hoặc kiểm tra kết nối.");
     }
   }, watchdogMs);
 
@@ -1190,17 +1190,17 @@ async function boot() {
     settled = true;
     clearTimeout(watchdog);
     loadingOverlay.classList.add("hidden");
-    statusText.textContent = "listo";
+    statusText.textContent = "sẵn sàng";
     requestAnimationFrame(renderLoop);
   } catch (err) {
     settled = true;
     clearTimeout(watchdog);
     if (err && err.name === "NotAllowedError") {
-      showLoaderError("Permiso de cámara denegado. Habilítalo en la configuración del navegador y pulsa reintentar.");
+      showLoaderError("Quyền truy cập camera bị từ chối. Hãy bật lại trong cài đặt trình duyệt rồi nhấn thử lại.");
     } else if (err && err.name === "NotFoundError") {
-      showLoaderError("No se encontró ninguna webcam disponible.");
+      showLoaderError("Không tìm thấy webcam nào khả dụng.");
     } else {
-      showLoaderError((err && err.message) || "Error iniciando la app.");
+      showLoaderError((err && err.message) || "Lỗi khi khởi động ứng dụng.");
     }
   }
 }
@@ -1217,7 +1217,7 @@ if (downloadStripBtn) {
 if (resetAllBtn) {
   resetAllBtn.addEventListener("click", () => {
     const confirmed = window.confirm(
-      "¿Seguro que quieres borrar toda la tira de fotos y empezar de nuevo?"
+      "Bạn có chắc muốn xóa toàn bộ dải ảnh và bắt đầu lại không?"
     );
     if (confirmed) resetEverything();
   });
