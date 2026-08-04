@@ -115,6 +115,25 @@
   }
   .row{ display:flex; gap:10px; flex-wrap:wrap; justify-content:center; }
   .hidden{ display:none !important; }
+
+  .shutter-btn{
+    width:72px; height:72px;
+    border-radius:50%;
+    background:rgba(255,255,255,0.06);
+    border:2px solid var(--paper);
+    padding:0;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+  .shutter-btn:disabled{ opacity:0.35; }
+  .shutter-btn-ring{
+    width:54px; height:54px;
+    border-radius:50%;
+    background:var(--signal);
+    transition:transform 0.1s ease;
+  }
+  .shutter-btn:active:not(:disabled) .shutter-btn-ring{ transform:scale(0.88); }
 </style>
 </head>
 <body>
@@ -136,12 +155,19 @@
       <button type="button" id="startBtn">bắt đầu camera</button>
       <button type="button" id="flipBtn" class="secondary hidden">đổi camera trước/sau</button>
     </div>
+
+    <button type="button" id="shutterBtn" class="shutter-btn hidden" disabled aria-label="Chụp ảnh">
+      <span class="shutter-btn-ring"></span>
+    </button>
+    <p class="sub hidden" id="shutterHint">Bấm để laptop bắt đầu đếm ngược và chụp</p>
   </div>
 
 <script>
 (function () {
   const startBtn = document.getElementById("startBtn");
   const flipBtn = document.getElementById("flipBtn");
+  const shutterBtn = document.getElementById("shutterBtn");
+  const shutterHint = document.getElementById("shutterHint");
   const previewBox = document.getElementById("previewBox");
   const localPreview = document.getElementById("localPreview");
   const statusDot = document.getElementById("statusDot");
@@ -156,6 +182,7 @@
   let currentFacing = "user";
   let peer = null;
   let activeCall = null;
+  let dataConn = null;
 
   function setStatus(text, state) {
     statusText.textContent = text;
@@ -221,6 +248,29 @@
     }, 800);
   }
 
+  function connectDataChannel() {
+    if (!peer || peer.destroyed) return;
+    dataConn = peer.connect(targetPeerId);
+    dataConn.on("open", () => {
+      shutterBtn.classList.remove("hidden");
+      shutterHint.classList.remove("hidden");
+      shutterBtn.disabled = false;
+    });
+    dataConn.on("data", (msg) => {
+      if (msg === "ack") {
+        setStatus("đang chụp — giữ yên…", "armed");
+      } else if (msg === "saved") {
+        setStatus("đã lưu ảnh! chụp tiếp được rồi", "live");
+      } else if (msg === "busy") {
+        setStatus("máy tính đang bận, thử lại sau", "armed");
+      }
+    });
+    dataConn.on("close", () => {
+      shutterBtn.disabled = true;
+      setStatus("mất kênh điều khiển — thử kết nối lại", null);
+    });
+  }
+
   async function start() {
     startBtn.disabled = true;
     setStatus("đang xin quyền camera…", "armed");
@@ -240,7 +290,10 @@
     setStatus("đang kết nối tới máy tính…", "armed");
 
     peer = new Peer();
-    peer.on("open", () => callLaptop(localStream));
+    peer.on("open", () => {
+      callLaptop(localStream);
+      connectDataChannel();
+    });
     peer.on("error", (err) => {
       console.error("[PuzzleCam mobile] lỗi PeerJS:", err);
       setStatus("lỗi kết nối (" + (err && err.type ? err.type : "?") + ")", null);
@@ -268,9 +321,17 @@
 
   startBtn.addEventListener("click", start);
   flipBtn.addEventListener("click", flipCamera);
+  shutterBtn.addEventListener("click", () => {
+    if (dataConn && dataConn.open) {
+      dataConn.send("capture");
+    } else {
+      setStatus("chưa kết nối kênh điều khiển, thử lại sau vài giây", null);
+    }
+  });
 
   window.addEventListener("beforeunload", () => {
     if (localStream) localStream.getTracks().forEach((t) => t.stop());
+    if (dataConn) dataConn.close();
     if (peer) peer.destroy();
   });
 })();

@@ -246,6 +246,23 @@ function fitCanvasToWindow() {
 
 window.addEventListener("resize", fitCanvasToWindow);
 
+// Khi nguồn video đổi độ phân giải/tỉ lệ giữa chừng (ví dụ điện thoại bị
+// xoay ngang <-> dọc), trình duyệt bắn sự kiện "resize" trên thẻ <video>.
+// Nếu không nghe sự kiện này, canvas vẫn giữ kích thước cũ và hình sẽ bị
+// méo/phóng to sai tỉ lệ. Chỉ gắn một lần.
+let videoResizeListenerAttached = false;
+function attachVideoResizeListener() {
+  if (videoResizeListenerAttached) return;
+  videoResizeListenerAttached = true;
+  videoEl.addEventListener("resize", () => {
+    if (!videoEl.videoWidth || !videoEl.videoHeight) return;
+    canvas.width = videoEl.videoWidth;
+    canvas.height = videoEl.videoHeight;
+    fitCanvasToWindow();
+  });
+}
+attachVideoResizeListener();
+
 async function initWebcam() {
   if (!navigator.mediaDevices?.getUserMedia) {
     throw new Error("Trình duyệt này không hỗ trợ getUserMedia.");
@@ -417,11 +434,16 @@ function computeCenterFrame() {
   };
 }
 
+function triggerManualCapture() {
+  if (appState !== "tracking" || isStripFull()) return false;
+  freezeGate.holding = false;
+  startCountdown(computeCenterFrame());
+  return true;
+}
+
 if (manualShutterBtn) {
   manualShutterBtn.addEventListener("click", () => {
-    if (appState !== "tracking" || isStripFull()) return;
-    freezeGate.holding = false;
-    startCountdown(computeCenterFrame());
+    triggerManualCapture();
   });
 }
 
@@ -1002,6 +1024,9 @@ function finishShatter() {
     addToGallery(shatter.pendingCanvas);
     statusText.textContent = "đã lưu vào dải ảnh!";
     shatter.pendingCanvas = null;
+    if (phoneDataConn && phoneDataConn.open) {
+      phoneDataConn.send("saved");
+    }
   }
   resetPuzzleOnly();
 }
@@ -1212,6 +1237,7 @@ function resetLoaderUI() {
 /* ---------- phone-as-camera pairing (PeerJS + QR) ---------- */
 
 let phonePeer = null;
+let phoneDataConn = null;
 
 function buildMobileUrl(peerId) {
   const url = new URL("mobile.html", window.location.href);
@@ -1248,6 +1274,7 @@ function teardownPhonePairing() {
     phonePeer.destroy();
     phonePeer = null;
   }
+  phoneDataConn = null;
 }
 
 function isInsecureContextForCamera() {
@@ -1294,6 +1321,24 @@ function startPhonePairing() {
     call.on("close", () => {
       pairingStatusDot.classList.remove("live");
       pairingStatusText.textContent = "điện thoại đã ngắt kết nối.";
+    });
+  });
+
+  // Kênh dữ liệu riêng để điện thoại gửi lệnh "chụp" từ nút bấm trên
+  // chính điện thoại, và laptop báo lại trạng thái (đang chụp / đã lưu).
+  phonePeer.on("connection", (conn) => {
+    phoneDataConn = conn;
+    conn.on("data", (data) => {
+      if (data !== "capture") return;
+      if (appState !== "tracking" || isStripFull()) {
+        conn.send("busy");
+        return;
+      }
+      conn.send("ack");
+      triggerManualCapture();
+    });
+    conn.on("close", () => {
+      if (phoneDataConn === conn) phoneDataConn = null;
     });
   });
 
