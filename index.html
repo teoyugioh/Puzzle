@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Puzzle Cam — Gesture Capture</title>
 <link rel="stylesheet" href="css/styles.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 </head>
 <body>
 
@@ -26,7 +28,50 @@
       <span id="progressText">0 / 9 mảnh đã đặt</span>
     </div>
 
-    <div id="loadingOverlay">
+    <div id="sourceChooser" class="source-chooser">
+      <div class="chooser-box">
+        <div class="chooser-eyebrow">nguồn camera</div>
+        <h1 class="chooser-title">Chọn nơi lấy hình</h1>
+        <p class="chooser-sub">Dùng webcam ngay trên máy này, hoặc biến điện thoại thành camera rời — giống photobooth thật.</p>
+
+        <div class="chooser-options">
+          <button type="button" id="chooseLocalBtn" class="chooser-card">
+            <span class="chooser-card-tag">A</span>
+            <span class="chooser-card-title">Webcam máy này</span>
+            <span class="chooser-card-desc">Chụp trực tiếp bằng camera của laptop/PC.</span>
+          </button>
+          <button type="button" id="choosePhoneBtn" class="chooser-card">
+            <span class="chooser-card-tag">B</span>
+            <span class="chooser-card-title">Điện thoại làm camera</span>
+            <span class="chooser-card-desc">Quét mã QR, điện thoại trở thành camera rời qua wifi.</span>
+          </button>
+        </div>
+      </div>
+
+      <div id="pairingPanel" class="pairing-panel hidden">
+        <div class="pairing-head">
+          <span class="pairing-eyebrow">bắt cặp thiết bị</span>
+          <button type="button" id="pairingBackBtn" class="pairing-back">← quay lại</button>
+        </div>
+        <div class="pairing-body">
+          <div id="pairingQr" class="pairing-qr"></div>
+          <div class="pairing-info">
+            <div class="pairing-status">
+              <span id="pairingStatusDot" class="status-dot"></span>
+              <span id="pairingStatusText">đang tạo mã kết nối…</span>
+            </div>
+            <div class="pairing-steps">
+              <div>1. Mở điện thoại, quét mã QR bên cạnh</div>
+              <div>2. Cho phép trình duyệt trên điện thoại dùng camera</div>
+              <div>3. Màn hình này tự chuyển sang hình từ điện thoại</div>
+            </div>
+            <div class="pairing-hint">Hai thiết bị cần cùng mạng wifi để kết nối mượt nhất.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="loadingOverlay" class="hidden">
       <div class="loader-text" id="loaderText">đang tải mô hình HandLandmarker…</div>
       <div class="loader-bar"></div>
       <button type="button" id="loaderRetry" class="loader-retry hidden">thử lại</button>

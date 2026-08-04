@@ -58,6 +58,15 @@ const downloadStripBtn = document.getElementById("downloadStripBtn");
 const resetAllBtn = document.getElementById("resetAllBtn");
 const stripCompleteMsg = document.getElementById("stripCompleteMsg");
 
+const sourceChooser = document.getElementById("sourceChooser");
+const chooseLocalBtn = document.getElementById("chooseLocalBtn");
+const choosePhoneBtn = document.getElementById("choosePhoneBtn");
+const pairingPanel = document.getElementById("pairingPanel");
+const pairingBackBtn = document.getElementById("pairingBackBtn");
+const pairingQr = document.getElementById("pairingQr");
+const pairingStatusDot = document.getElementById("pairingStatusDot");
+const pairingStatusText = document.getElementById("pairingStatusText");
+
 let appState = "tracking";
 
 const puzzle = {
@@ -1169,6 +1178,123 @@ function resetLoaderUI() {
   errorBanner.style.display = "none";
 }
 
+/* ---------- phone-as-camera pairing (PeerJS + QR) ---------- */
+
+let phonePeer = null;
+
+function buildMobileUrl(peerId) {
+  const url = new URL("mobile.html", window.location.href);
+  url.searchParams.set("peer", peerId);
+  return url.toString();
+}
+
+function renderPairingQr(url) {
+  pairingQr.innerHTML = "";
+  if (typeof QRCode === "undefined") {
+    pairingQr.textContent = url;
+    return;
+  }
+  new QRCode(pairingQr, {
+    text: url,
+    width: 320,
+    height: 320,
+    correctLevel: QRCode.CorrectLevel.M,
+  });
+}
+
+function hideSourceChooser() {
+  sourceChooser.classList.add("hidden");
+}
+
+function showChooserHome() {
+  pairingPanel.classList.add("hidden");
+  document.querySelector(".chooser-box").classList.remove("hidden");
+  teardownPhonePairing();
+}
+
+function teardownPhonePairing() {
+  if (phonePeer) {
+    phonePeer.destroy();
+    phonePeer = null;
+  }
+}
+
+function startPhonePairing() {
+  teardownPhonePairing();
+  pairingStatusDot.classList.remove("live");
+  pairingStatusText.textContent = "đang tạo mã kết nối…";
+  pairingQr.innerHTML = "";
+
+  if (typeof Peer === "undefined") {
+    pairingStatusText.textContent =
+      "Không tải được thư viện kết nối (PeerJS). Kiểm tra mạng và thử lại.";
+    return;
+  }
+
+  const id = "pzc-" + Math.random().toString(36).slice(2, 8);
+  phonePeer = new Peer(id);
+
+  phonePeer.on("open", (openId) => {
+    renderPairingQr(buildMobileUrl(openId));
+    pairingStatusText.textContent = "đang chờ điện thoại kết nối…";
+  });
+
+  phonePeer.on("call", (call) => {
+    call.answer();
+    call.on("stream", (remoteStream) => {
+      pairingStatusDot.classList.add("live");
+      pairingStatusText.textContent = "đã kết nối — đang khởi động…";
+      onPhoneStreamReceived(remoteStream);
+    });
+    call.on("close", () => {
+      pairingStatusDot.classList.remove("live");
+      pairingStatusText.textContent = "điện thoại đã ngắt kết nối.";
+    });
+  });
+
+  phonePeer.on("error", (err) => {
+    console.error("[PuzzleCam] Lỗi PeerJS:", err);
+    pairingStatusText.textContent =
+      "Lỗi kết nối (" + (err && err.type ? err.type : "?") + "). Nhấn ← quay lại rồi thử lại.";
+  });
+}
+
+async function onPhoneStreamReceived(stream) {
+  videoEl.srcObject = stream;
+  await new Promise((resolve) => {
+    videoEl.onloadedmetadata = () => {
+      videoEl.play();
+      resolve();
+    };
+  });
+  canvas.width = videoEl.videoWidth;
+  canvas.height = videoEl.videoHeight;
+  fitCanvasToWindow();
+  setTimeout(() => {
+    hideSourceChooser();
+    boot();
+  }, 350);
+}
+
+if (chooseLocalBtn) {
+  chooseLocalBtn.addEventListener("click", () => {
+    hideSourceChooser();
+    boot();
+  });
+}
+
+if (choosePhoneBtn) {
+  choosePhoneBtn.addEventListener("click", () => {
+    document.querySelector(".chooser-box").classList.add("hidden");
+    pairingPanel.classList.remove("hidden");
+    startPhonePairing();
+  });
+}
+
+if (pairingBackBtn) {
+  pairingBackBtn.addEventListener("click", showChooserHome);
+}
+
 async function boot() {
   resetLoaderUI();
 
@@ -1223,4 +1349,6 @@ if (resetAllBtn) {
   });
 }
 
-boot();
+// Chờ người dùng chọn nguồn camera (webcam máy này / điện thoại) ở
+// #sourceChooser trước khi boot() được gọi — xem phần "phone-as-camera
+// pairing" phía trên.
