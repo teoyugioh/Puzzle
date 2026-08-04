@@ -177,6 +177,17 @@
     return;
   }
 
+  const isLocalhost = ["localhost", "127.0.0.1", "::1"].includes(window.location.hostname);
+  if (window.location.protocol !== "https:" && !isLocalhost) {
+    titleText.textContent = "Trang chưa chạy qua HTTPS";
+    subText.textContent =
+      "iPhone chặn camera trên trang HTTP không an toàn. Nhờ người mở màn hình máy tính " +
+      "chạy qua địa chỉ HTTPS thật (deploy lên Vercel/Netlify, hoặc dùng ngrok) rồi quét lại mã QR mới.";
+    startBtn.disabled = true;
+    setStatus("cần HTTPS để dùng camera", null);
+    return;
+  }
+
   async function getStream(facing) {
     return navigator.mediaDevices.getUserMedia({
       video: { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 } },

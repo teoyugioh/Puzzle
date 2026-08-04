@@ -66,6 +66,7 @@ const pairingBackBtn = document.getElementById("pairingBackBtn");
 const pairingQr = document.getElementById("pairingQr");
 const pairingStatusDot = document.getElementById("pairingStatusDot");
 const pairingStatusText = document.getElementById("pairingStatusText");
+const manualShutterBtn = document.getElementById("manualShutterBtn");
 
 let appState = "tracking";
 
@@ -229,11 +230,14 @@ function fitCanvasToWindow() {
 
   let cssWidth, cssHeight;
   if (containerAspect > videoAspect) {
-    cssWidth = vw;
-    cssHeight = vw / videoAspect;
-  } else {
+    // Khung chứa rộng hơn tỉ lệ video -> canh theo chiều cao (vừa khung,
+    // không cắt cúp). Quan trọng với video dọc từ điện thoại, vốn có tỉ lệ
+    // rất khác webcam ngang thông thường.
     cssHeight = vh;
     cssWidth = vh * videoAspect;
+  } else {
+    cssWidth = vw;
+    cssHeight = vw / videoAspect;
   }
 
   canvas.style.width = `${cssWidth}px`;
@@ -396,6 +400,29 @@ function startCountdown(frameBox) {
   appState = "countdown";
   countdown.active = true;
   countdown.startedAt = performance.now();
+}
+
+function computeCenterFrame() {
+  // Lấy gần trọn khung hình (chừa viền nhỏ) thay vì một ô vuông nhỏ ở giữa,
+  // để camera đặt xa (ví dụ điện thoại quay cả người) không bị cắt cụt chỉ
+  // còn phần đầu/vai. Puzzle vẫn hoạt động bình thường với khung chữ nhật
+  // vì các mảnh ghép được chia độc lập theo chiều rộng/cao.
+  const marginX = canvas.width * 0.05;
+  const marginY = canvas.height * 0.04;
+  return {
+    x: marginX,
+    y: marginY,
+    width: canvas.width - marginX * 2,
+    height: canvas.height - marginY * 2,
+  };
+}
+
+if (manualShutterBtn) {
+  manualShutterBtn.addEventListener("click", () => {
+    if (appState !== "tracking" || isStripFull()) return;
+    freezeGate.holding = false;
+    startCountdown(computeCenterFrame());
+  });
 }
 
 function drawCountdownOverlay(box) {
@@ -1156,6 +1183,10 @@ function renderLoop() {
     const result = handLandmarker.detectForVideo(videoEl, nowMs);
     processResults(result);
   }
+  if (manualShutterBtn) {
+    const shouldShow = appState === "tracking" && !isStripFull();
+    manualShutterBtn.classList.toggle("hidden", !shouldShow);
+  }
   requestAnimationFrame(renderLoop);
 }
 
@@ -1219,11 +1250,25 @@ function teardownPhonePairing() {
   }
 }
 
+function isInsecureContextForCamera() {
+  const host = window.location.hostname;
+  const isLocalhost = host === "localhost" || host === "127.0.0.1" || host === "::1";
+  return window.location.protocol !== "https:" && !isLocalhost;
+}
+
 function startPhonePairing() {
   teardownPhonePairing();
   pairingStatusDot.classList.remove("live");
   pairingStatusText.textContent = "đang tạo mã kết nối…";
   pairingQr.innerHTML = "";
+
+  if (isInsecureContextForCamera()) {
+    pairingStatusText.textContent =
+      "Trang này đang chạy qua HTTP (không phải HTTPS). iPhone/Safari sẽ chặn camera " +
+      "và không hiện popup xin quyền. Hãy mở trang qua một địa chỉ HTTPS thật (deploy lên " +
+      "Vercel/Netlify, hoặc dùng ngrok tạm thời) rồi thử lại.";
+    return;
+  }
 
   if (typeof Peer === "undefined") {
     pairingStatusText.textContent =
