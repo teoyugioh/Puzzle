@@ -20,7 +20,7 @@
 
 html,body{
   margin:0; padding:0;
-  width:100vw; height:100vh;
+  width:100vw; height:100vh; height:100dvh;
   background:var(--ink);
   overflow:hidden;
   font-family:var(--sans);
@@ -30,7 +30,28 @@ html,body{
 #app{
   display:flex;
   width:100vw;
-  height:100vh;
+  height:100vh; height:100dvh;
+}
+
+@media (max-width: 720px){
+  #app{ flex-direction:column; }
+
+  #stage{ flex:1 1 auto; height:auto; min-height:0; }
+
+  #gallery{
+    flex:0 0 auto;
+    width:100%;
+    height:auto;
+    max-height:24vh;
+    border-left:none;
+    border-top:1px solid var(--gallery-border);
+  }
+  .gallery-strip{
+    flex-direction:row;
+    overflow-x:auto;
+    overflow-y:hidden;
+  }
+  .print{ flex:0 0 108px; }
 }
 
 
@@ -51,6 +72,10 @@ canvas#sceneCanvas{
   top:50%; left:50%;
   transform:translate(-50%,-50%);
   display:block;
+  /* Chặn trình duyệt cuộn/zoom trang khi người dùng kéo mảnh ghép bằng ngón
+     tay trên canvas — nếu thiếu dòng này, thao tác kéo trên mobile sẽ bị
+     trình duyệt "cướp" thành cử chỉ cuộn trang. */
+  touch-action:none;
 }
 
 
@@ -193,6 +218,31 @@ canvas#sceneCanvas{
   transition:background 0.15s ease;
 }
 .shutter-btn:hover .shutter-btn-ring{ background:var(--signal); }
+
+/* Nút "lưu" cho controlMode === "pointer" — chiếm cùng vị trí với shutter-btn
+   vì hai nút không bao giờ hiện cùng lúc (shutter chỉ hiện ở appState
+   "tracking", nút này chỉ hiện ở "puzzle" đã solved). */
+.pointer-save-btn{
+  position:absolute;
+  bottom:26px;
+  left:50%;
+  transform:translateX(-50%);
+  z-index:6;
+  font-family:var(--mono);
+  font-size:12px;
+  letter-spacing:0.08em;
+  text-transform:uppercase;
+  padding:15px 30px;
+  border-radius:30px;
+  border:2px solid var(--ok);
+  background:rgba(95,174,110,0.18);
+  color:var(--ok);
+  cursor:pointer;
+  transition:background 0.15s ease, transform 0.15s ease;
+}
+.pointer-save-btn:hover{ background:rgba(95,174,110,0.3); }
+.pointer-save-btn:active{ transform:translateX(-50%) scale(0.96); }
+.pointer-save-btn.hidden{ display:none; }
 
 
 #loadingOverlay{

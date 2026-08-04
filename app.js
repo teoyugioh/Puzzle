@@ -67,8 +67,32 @@ const pairingQr = document.getElementById("pairingQr");
 const pairingStatusDot = document.getElementById("pairingStatusDot");
 const pairingStatusText = document.getElementById("pairingStatusText");
 const manualShutterBtn = document.getElementById("manualShutterBtn");
+const pointerSaveBtn = document.getElementById("pointerSaveBtn");
 
 let appState = "tracking";
+
+// controlMode quyết định cách người dùng thao tác với puzzle:
+// - "gesture": pinch/fist bằng tay thật, qua HandLandmarker (chỉ hợp lý khi camera đứng yên
+//   và cả 2 tay đang rảnh — tức webcam của một thiết bị KHÔNG cảm ứng).
+// - "pointer": kéo-thả bằng con trỏ (chuột hoặc cảm ứng) trên chính canvas.
+let controlMode = "gesture";
+let pointerKind = null; // "mouse" | "touch" — chỉ có ý nghĩa khi controlMode === "pointer"
+
+function isTouchPrimaryDevice() {
+  return window.matchMedia("(pointer: coarse)").matches;
+}
+
+// sourceType: "local" (webcam của chính thiết bị đang mở trang này) hoặc
+// "phone-remote" (điện thoại khác stream vào qua PeerJS).
+function decideControlMode(sourceType) {
+  if (sourceType === "local" && !isTouchPrimaryDevice()) {
+    controlMode = "gesture";
+    pointerKind = null;
+  } else {
+    controlMode = "pointer";
+    pointerKind = isTouchPrimaryDevice() ? "touch" : "mouse";
+  }
+}
 
 const puzzle = {
   boardBox: null,
@@ -212,6 +236,7 @@ function resetPuzzleOnly() {
   countdown.active = false;
   drag.activeHand = null;
   drag.piece = null;
+  activePointerId = null;
   shatter.active = false;
   shatter.fragments = [];
   shatter.pendingCanvas = null;
@@ -763,6 +788,63 @@ function handleDragForHand(handLabel, pinching, indexPx) {
   }
 }
 
+/* ---------- pointer / touch controls (controlMode === "pointer") ---------- */
+// Tái dùng handleDragForHand: nó vốn nhận (label, đang giữ hay không, điểm ảnh),
+// nên coi con trỏ chuột/ngón tay như một "bàn tay ảo" tên "pointer" là đủ,
+// không cần viết lại logic snap/displace riêng cho touch.
+
+function getCanvasPoint(evt) {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  return {
+    x: (evt.clientX - rect.left) * scaleX,
+    y: (evt.clientY - rect.top) * scaleY,
+  };
+}
+
+let activePointerId = null;
+
+canvas.addEventListener("pointerdown", (evt) => {
+  if (controlMode !== "pointer" || appState !== "puzzle") return;
+  const p = getCanvasPoint(evt);
+  handleDragForHand("pointer", true, p);
+  if (drag.piece) {
+    activePointerId = evt.pointerId;
+    canvas.setPointerCapture(evt.pointerId);
+    evt.preventDefault();
+  }
+});
+
+canvas.addEventListener("pointermove", (evt) => {
+  if (controlMode !== "pointer" || evt.pointerId !== activePointerId) return;
+  handleDragForHand("pointer", true, getCanvasPoint(evt));
+  evt.preventDefault();
+});
+
+function endPointerDrag(evt) {
+  if (controlMode !== "pointer" || evt.pointerId !== activePointerId) return;
+  handleDragForHand("pointer", false, getCanvasPoint(evt));
+  activePointerId = null;
+}
+canvas.addEventListener("pointerup", endPointerDrag);
+canvas.addEventListener("pointercancel", endPointerDrag);
+canvas.addEventListener("pointerleave", (evt) => {
+  if (activePointerId !== null && evt.pointerId === activePointerId) endPointerDrag(evt);
+});
+
+if (pointerSaveBtn) {
+  pointerSaveBtn.addEventListener("click", () => {
+    if (controlMode !== "pointer" || appState !== "puzzle") return;
+    const reallySolved = reconcilePlacedState(puzzle.boardBox, puzzle.tileW, puzzle.tileH);
+    puzzle.solved = reallySolved;
+    if (reallySolved && puzzle.fullPhotoboothCanvas) {
+      shatter.pendingCanvas = puzzle.fullPhotoboothCanvas;
+      startShatter(puzzle.fullPhotoboothCanvas, puzzle.boardBox);
+    }
+  });
+}
+
 function clampPieceToBoard(piece) {
   const box = puzzle.boardBox;
   piece.x = Math.min(Math.max(piece.x, box.x), box.x + box.width - piece.w);
@@ -821,7 +903,13 @@ function drawBoardAndPieces() {
     ctx.fillStyle = "#5fae6e";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText("HOÀN THÀNH! — nắm tay để lưu", box.x + box.width / 2, box.y + box.height / 2);
+    const solvedHint =
+      controlMode === "gesture"
+        ? "nắm tay để lưu"
+        : pointerKind === "touch"
+        ? "chạm nút Lưu"
+        : "bấm nút Lưu";
+    ctx.fillText(`HOÀN THÀNH! — ${solvedHint}`, box.x + box.width / 2, box.y + box.height / 2);
     ctx.restore();
   }
 }
@@ -1201,16 +1289,68 @@ function processResults(result) {
   }
 }
 
+// Nhánh cho controlMode === "pointer": không có landmark tay, chỉ vẽ video +
+// board/pieces và cập nhật status text theo trạng thái hiện có. Việc chụp ảnh
+// luôn đi qua manualShutterBtn (đã dùng chung cho mọi mode), việc kéo-thả đi
+// qua các pointer event gắn trên canvas (xem phần "pointer / touch controls"),
+// việc lưu khi ghép xong đi qua pointerSaveBtn.
+function processPointerFrame() {
+  if (appState === "shattering") {
+    updateAndDrawShatter();
+    statusText.textContent = "đang lưu…";
+    return;
+  }
+
+  if (appState === "tracking") {
+    statusText.textContent = isStripFull()
+      ? "dải ảnh đã đầy — tải về hoặc reset"
+      : pointerKind === "touch"
+      ? "chạm nút chụp bên dưới"
+      : "bấm nút chụp bên dưới";
+    return;
+  }
+
+  if (appState === "countdown") {
+    drawCountdownOverlay(puzzle.boardBox);
+    return;
+  }
+
+  if (appState === "puzzle") {
+    if (!drag.piece) {
+      puzzle.solved = reconcilePlacedState(puzzle.boardBox, puzzle.tileW, puzzle.tileH);
+      updateProgressBadge();
+    }
+    drawBoardAndPieces();
+    statusText.textContent = puzzle.solved
+      ? pointerKind === "touch"
+        ? "puzzle đã hoàn thành! chạm nút Lưu"
+        : "puzzle đã hoàn thành! bấm nút Lưu"
+      : pointerKind === "touch"
+      ? "chạm và kéo để ghép hình"
+      : "kéo thả để ghép hình";
+  }
+}
+
 function renderLoop() {
-  if (videoEl.readyState >= 2 && handLandmarker) {
+  const videoReady = videoEl.readyState >= 2;
+  if (videoReady && controlMode === "gesture" && handLandmarker) {
     drawVideoFrame();
     const nowMs = performance.now();
     const result = handLandmarker.detectForVideo(videoEl, nowMs);
     processResults(result);
+  } else if (videoReady && controlMode === "pointer") {
+    drawVideoFrame();
+    processPointerFrame();
   }
+
   if (manualShutterBtn) {
     const shouldShow = appState === "tracking" && !isStripFull();
     manualShutterBtn.classList.toggle("hidden", !shouldShow);
+  }
+  if (pointerSaveBtn) {
+    const shouldShowSave =
+      controlMode === "pointer" && appState === "puzzle" && puzzle.solved;
+    pointerSaveBtn.classList.toggle("hidden", !shouldShowSave);
   }
   requestAnimationFrame(renderLoop);
 }
@@ -1229,7 +1369,10 @@ function showLoaderError(message) {
 function resetLoaderUI() {
   loadingOverlay.classList.remove("hidden");
   loaderText.style.color = "";
-  loaderText.textContent = "đang tải mô hình HandLandmarker…";
+  loaderText.textContent =
+    controlMode === "gesture"
+      ? "đang tải mô hình HandLandmarker…"
+      : "đang khởi động camera…";
   loaderRetry.classList.add("hidden");
   errorBanner.style.display = "none";
 }
@@ -1350,6 +1493,7 @@ function startPhonePairing() {
 }
 
 async function onPhoneStreamReceived(stream) {
+  decideControlMode("phone-remote");
   videoEl.srcObject = stream;
   await new Promise((resolve) => {
     videoEl.onloadedmetadata = () => {
@@ -1368,6 +1512,7 @@ async function onPhoneStreamReceived(stream) {
 
 if (chooseLocalBtn) {
   chooseLocalBtn.addEventListener("click", () => {
+    decideControlMode("local");
     hideSourceChooser();
     boot();
   });
@@ -1401,12 +1546,19 @@ async function boot() {
       await initWebcam();
     }
 
-    handLandmarker = await initHandLandmarker();
+    if (controlMode === "gesture") {
+      handLandmarker = await initHandLandmarker();
+    }
 
     settled = true;
     clearTimeout(watchdog);
     loadingOverlay.classList.add("hidden");
-    statusText.textContent = "sẵn sàng";
+    statusText.textContent =
+      controlMode === "gesture"
+        ? "sẵn sàng"
+        : pointerKind === "touch"
+        ? "sẵn sàng — chạm nút để chụp"
+        : "sẵn sàng — bấm nút để chụp";
     requestAnimationFrame(renderLoop);
   } catch (err) {
     settled = true;
